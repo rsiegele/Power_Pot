@@ -12,10 +12,13 @@
 #include "Adafruit_SSD1306.h"
 #include "adafruit_gfx.h"
 #include "adafruit_bme280.h"
+#include "grove_air_quality_sensor.h"
 SYSTEM_MODE(AUTOMATIC);
 // initialize pins
-int AQpin = A2;    
-int relayPin = D9;
+int AQpin1 = A1;    
+int AQpin2 = A5;
+int relayPin = D2;
+int moisturePin = A2;
 
 
 
@@ -32,10 +35,15 @@ int tempC, tempF, pasc, inHg, humidity, lastTime, BME;
 
 
 // initialize variables
-int airQ;
+int airQuality1, airQuality2;
 int lastWtr, sinceLastWtr;
 int wtrInterval;
-int
+int moisture;
+int pTimer, pTimer1, duration2;
+int pumpTimer;
+int pumpDuration = 30000;
+
+
 // initialize functions
 void pump(int duration);
 void fetchBME();
@@ -54,7 +62,7 @@ SYSTEM_THREAD(ENABLED);
 
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 Adafruit_SSD1306 display(OLEDRESET);
-Adafruit_BME280 bme(BME);
+Adafruit_BME280 bme;
 
 
 
@@ -64,11 +72,13 @@ void setup() {
  Serial.begin(9600);
  waitFor(Serial.isConnected, 10000);
  pinMode(relayPin, OUTPUT);
- 
+ pinMode(moisturePin, INPUT);
+
+
  bme.begin(BMEADDRESS);
  display.begin(SSD1306_SWITCHCAPVCC, OLEDADDRESS);
  display.display();
- delay(200);
+ delay(2000);
  display.clearDisplay();
 
 
@@ -79,12 +89,17 @@ void setup() {
 
 // loop() runs over and over again, as quickly as it can execute.
 void loop() {
- printAll(50);
- delay(1000);
+if((millis() - pumpTimer)>= pumpDuration){
+  pump(5000);
+  pumpTimer = millis();
 
 
+}
 
 
+fetchBME();
+fetchAQ();
+dispOLED();
 }
 
 
@@ -94,11 +109,23 @@ void loop() {
 
 // Turns on the pump for specified duration
 void pump(int duration){
+ duration2 = duration+1000;
+ if((millis() - pTimer)>=duration){
+
+
  digitalWrite(relayPin, HIGH);
-  delay(duration/2);
+pTimer = millis();
+ }
+ if((millis() - pTimer1)>=duration2){
   digitalWrite(relayPin, LOW);
-  delay(duration/2);
- sinceLastWtr = millis();
+pTimer1 = millis();
+ }
+ 
+
+
+ 
+ 
+ sinceLastWtr =millis();
 
 
 }
@@ -113,6 +140,9 @@ void fetchBME(){
 tempC = bme.readTemperature();
 pasc = bme.readPressure();
 humidity = bme.readHumidity();
+moisture = analogRead(moisturePin);
+inHg = pasc/3386;
+tempF = (tempC*9/5)+32;
 }
 
 
@@ -124,7 +154,8 @@ humidity = bme.readHumidity();
 
 // Read air quality sensor information
 void fetchAQ(){
-readingAQ = analogRead(AQpin);
+airQuality1 = analogRead(AQpin1);
+airQuality2 = analogRead(AQpin2);
 }
 
 
@@ -134,11 +165,12 @@ readingAQ = analogRead(AQpin);
 
 // Displays the information
 void dispOLED(){
+  display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0,0);
   lastWtr = (millis() - sinceLastWtr)/60000; //Converts time since last water to minutes
-  display.printf("Last watered:%i", lastWtr);
+  display.printf("Temp:%i\nPressure:%i\nHumidity:%i\nDirt moisture%i\nLarge Particles:%i\nSmall Particles:%i\n Last Watered:%i\n", tempF, inHg, humidity, moisture, airQuality1, airQuality2, lastWtr);
   display.display();
 }
 
@@ -146,10 +178,12 @@ void dispOLED(){
 void printAll(int delay){
 
 
-  Serial.printf("Temp:%i\nPressure:%i\nHumidity:%i\nAir quality:%i\nDirt moisture%i\n", tempC, pasc, humidity, airQuality, moisture);
+  Serial.printf("Temp:%i\nPressure:%i\nHumidity:%i\nAir quality:%i\nDirt moisture%i\n", tempC, pasc, humidity, airQuality1, moisture);
 
 
 
 
 }
+
+
 
